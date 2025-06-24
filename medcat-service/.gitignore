@@ -1,0 +1,24 @@
+.DS_Store
+.idea
+.vscode
+venv
+venv-test
+tmp_cat.log
+__pycache__
+.mypy_cache
+*.pyc
+.pyc
+# skip the models directory
+models/*
+!models/*.sh
+!models/examples
+models/examples/example-medcat-v1-model-pack
+
+# tmp folder
+tmp/*
+
+# env folder
+env/*
+
+# log files
+medcat.log
