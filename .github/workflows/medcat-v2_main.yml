@@ -10,19 +10,19 @@ defaults:
     working-directory: ./medcat-v2
 jobs:
   build:
-
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: [ '3.9', '3.10', '3.11', '3.12' ]
       max-parallel: 4
-
     steps:
       - uses: actions/checkout@v4
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        run: uv python install ${{ matrix.python-version }}
+      - name: Install uv for Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: "medcat-v2/uv.lock"
       - name: Install the project
         run: |
           uv sync --all-extras --dev
@@ -43,3 +43,5 @@ jobs:
       - name: Backwards compatibility
         run: |
           uv run bash tests/backwards_compatibility/check_backwards_compatibility.sh
+      - name: Minimize uv cache
+        run: uv cache prune --ci
