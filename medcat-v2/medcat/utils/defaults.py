@@ -1,12 +1,41 @@
+import os
 from typing import Optional
 from multiprocessing import cpu_count
 from functools import lru_cache
+import logging
 
 
 DEFAULT_SPACY_MODEL = 'en_core_web_md'
 DEFAULT_PACK_NAME = "medcat2_model_pack"
 COMPONENTS_FOLDER = "saved_components"
 AVOID_LEGACY_CONVERSION_ENVIRON = "MEDCAT_AVOID_LECACY_CONVERSION"
+
+
+def avoid_legacy_conversion() -> bool:
+    return os.environ.get(
+        AVOID_LEGACY_CONVERSION_ENVIRON, "False").lower() == "true"
+
+
+class LegacyConversionDisabledError(Exception):
+    """Raised when legacy conversion is disabled."""
+
+    def __init__(self, component_name: str):
+        super().__init__(
+            f"Legacy conversion is disabled (while loading {component_name}). "
+            f"Set the environment variable {AVOID_LEGACY_CONVERSION_ENVIRON} "
+            "to `False` to allow conversion.")
+
+
+def doing_legacy_conversion_message(
+        logger: logging.Logger, component_name: str, file_path: str = '',
+        level: int = logging.WARNING
+        ) -> None:
+    logger.log(
+        level,
+        "Doing legacy conversion on %s (at '%s'). "
+        "Set the environment variable %s "
+        "to `True` to avoid this.",
+        component_name, file_path, AVOID_LEGACY_CONVERSION_ENVIRON)
 
 
 @lru_cache(maxsize=100)

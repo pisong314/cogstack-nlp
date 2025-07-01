@@ -1,4 +1,5 @@
 from typing import Iterable, Any, Collection, Union, Literal
+import os
 
 from medcat.storage.serialisables import AbstractSerialisable
 from medcat.cdb.concepts import CUIInfo, NameInfo, TypeInfo
@@ -9,6 +10,9 @@ from medcat.storage.serialisers import (
 from medcat.storage.zip_utils import (
     should_serialise_as_zip, serialise_as_zip, deserialise_from_zip)
 from medcat.utils.defaults import default_weighted_average, StatusTypes as ST
+from medcat.utils.defaults import avoid_legacy_conversion
+from medcat.utils.defaults import doing_legacy_conversion_message
+from medcat.utils.defaults import LegacyConversionDisabledError
 from medcat.utils.hasher import Hasher
 from medcat.preprocessors.cleaners import NameDescriptor
 from medcat.config import Config
@@ -510,6 +514,13 @@ class CDB(AbstractSerialisable):
     def load(cls, path: str) -> 'CDB':
         if should_serialise_as_zip(path, 'auto'):
             cdb = deserialise_from_zip(path)
+        elif os.path.isfile(path) and path.endswith('.dat'):
+            if not avoid_legacy_conversion():
+                from medcat.utils.legacy.convert_cdb import get_cdb_from_old
+                doing_legacy_conversion_message(logger, 'CDB', path)
+                cdb = get_cdb_from_old(path)
+            else:
+                raise LegacyConversionDisabledError("CDB")
         else:
             cdb = deserialise(path)
         if not isinstance(cdb, CDB):

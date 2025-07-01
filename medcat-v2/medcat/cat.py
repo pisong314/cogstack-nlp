@@ -27,7 +27,9 @@ from medcat.data.model_card import ModelCard
 from medcat.components.types import AbstractCoreComponent, HashableComponet
 from medcat.components.addons.addons import AddonComponent
 from medcat.utils.legacy.identifier import is_legacy_model_pack
-from medcat.utils.defaults import AVOID_LEGACY_CONVERSION_ENVIRON
+from medcat.utils.defaults import avoid_legacy_conversion
+from medcat.utils.defaults import doing_legacy_conversion_message
+from medcat.utils.defaults import LegacyConversionDisabledError
 from medcat.utils.usage_monitoring import UsageMonitor
 
 
@@ -602,22 +604,13 @@ class CAT(AbstractSerialisable):
         logger.info("Attempting to load model from file: %s",
                     model_pack_path)
         is_legacy = is_legacy_model_pack(model_pack_path)
-        should_avoid = os.environ.get(
-            AVOID_LEGACY_CONVERSION_ENVIRON, "False").lower() == "true"
-        if is_legacy and not should_avoid:
+        avoid_legacy = avoid_legacy_conversion()
+        if is_legacy and not avoid_legacy:
             from medcat.utils.legacy.conversion_all import Converter
-            logger.warning(
-                "Doing legacy conversion on model pack '%s'. "
-                "This will make the model load take significantly longer. "
-                "If you wish to avoid this, set the environment variable '%s' "
-                "to 'true'", model_pack_path, AVOID_LEGACY_CONVERSION_ENVIRON)
+            doing_legacy_conversion_message(logger, 'CAT', model_pack_path)
             return Converter(model_pack_path, None).convert()
-        elif is_legacy and should_avoid:
-            raise ValueError(
-                f"The model pack '{model_pack_path}' is a legacy model pack. "
-                "Please set the environment variable "
-                f"'{AVOID_LEGACY_CONVERSION_ENVIRON}' "
-                "to 'true' to allow automatic conversion.")
+        elif is_legacy and avoid_legacy:
+            raise LegacyConversionDisabledError("CAT")
         # NOTE: ignoring addons since they will be loaded later / separately
         cat = deserialise(model_pack_path, model_load_path=model_pack_path,
                           ignore_folders_prefix={

@@ -1,5 +1,7 @@
 from typing import Optional, Any, cast, Union, Literal
 from typing_extensions import TypedDict
+import os
+import logging
 
 # import dill
 import numpy as np
@@ -9,6 +11,12 @@ from medcat.storage.serialisers import (
     deserialise, AvailableSerialisers, serialise)
 from medcat.storage.zip_utils import (
     should_serialise_as_zip, serialise_as_zip, deserialise_from_zip)
+from medcat.utils.defaults import avoid_legacy_conversion
+from medcat.utils.defaults import doing_legacy_conversion_message
+from medcat.utils.defaults import LegacyConversionDisabledError
+
+
+logger = logging.getLogger(__name__)
 
 
 WordDescriptor = TypedDict('WordDescriptor',
@@ -323,6 +331,14 @@ class Vocab(AbstractSerialisable):
     def load(cls, path: str) -> 'Vocab':
         if should_serialise_as_zip(path, 'auto'):
             vocab = deserialise_from_zip(path)
+        elif os.path.isfile(path) and path.endswith('.dat'):
+            if not avoid_legacy_conversion():
+                from medcat.utils.legacy.convert_vocab import (
+                    get_vocab_from_old)
+                doing_legacy_conversion_message(logger, 'Vocab', path)
+                vocab = get_vocab_from_old(path)
+            else:
+                raise LegacyConversionDisabledError("Vocab")
         else:
             vocab = deserialise(path)
         if not isinstance(vocab, Vocab):
