@@ -1,32 +1,20 @@
 name: medcat-service - Test
 
 on:
-
   push:
-    branches: [ devel, main ]
+    branches: [ main ]
   pull_request:
-    branches: [ devel, main ]
-    
-  release:
-    types: [published]
-
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
+    paths:
+      - 'medcat-service/**'
+      - '.github/workflows/medcat-service**'
 
 defaults:
   run:
     working-directory: ./medcat-service
 
 jobs:
-
   build:
-
     runs-on: ubuntu-latest
-    
-    env:
-      working-directory: ./
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       - name: checkout repo
         uses: actions/checkout@v2
@@ -36,7 +24,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: models/medmen
-          key: medmen-${{ hashFiles('scripts/download_medmen.sh') }}
+          key: medmen-${{ hashFiles('medcat-service/scripts/download_medmen.sh') }}
 
       - name: Install Python 3
         uses: actions/setup-python@v5
