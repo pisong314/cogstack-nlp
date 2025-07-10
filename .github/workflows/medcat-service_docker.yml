@@ -7,6 +7,7 @@ on:
       - 'medcat-service/v*.*.*'  # e.g., medcat-serice/v0.1.1
   pull_request:
     paths:
+      - 'medcat-v2/**'
       - 'medcat-service/**'
       - '.github/workflows/medcat-service**'
   release:
@@ -24,7 +25,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image_version: ${{ steps.meta.outputs.version }}
-    steps:        
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Log in to Docker Hub
         uses: docker/login-action@v1
         with:
@@ -51,17 +55,22 @@ jobs:
             # Create version tag based on tag prefix
             type=match,pattern=medcat-service/v(\d+\.\d+\.\d+),group=1
 
+      - name: Make medact-v2 available within build
+        run: cp -r ../medcat-v2 medcat-v2
+
       - name: Build and push Docker MedCATservice image
         id: docker_build
         uses: docker/build-push-action@v6
         with:
-          context: "{{defaultContext}}:medcat-service" # Set the working directory as the action doesnt use the working-directory default
+          context: ./medcat-service/
           push: true
           allow: network.host
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=cogstacksystems/medcat-service:buildcache
           cache-to: type=registry,ref=cogstacksystems/medcat-service:buildcache,mode=max
+          build-args: |
+            REINSTALL_CORE_FROM_LOCAL=true
       
       - name: Extract metadata (tags, labels) for Docker MedCATservice-gpu
         id: meta-gpu
@@ -79,19 +88,23 @@ jobs:
             type=sha
             # Create version tag based on tag prefix
             type=match,pattern=medcat-service/v(\d+\.\d+\.\d+),group=1
+          build-args: |
+            REINSTALL_CORE_FROM_LOCAL=true
 
       - name: Build and push Docker Jupyter singleuser image with GPU support
         id: docker_build_gpu
         uses: docker/build-push-action@v6
         with:
-          context: "{{defaultContext}}:medcat-service" # Set the working directory as the action doesnt use the working-directory default
-          file : "Dockerfile_gpu"
+          context: ./medcat-service/
+          file : "./medcat-service/Dockerfile_gpu"
           allow: network.host
           tags: ${{ steps.meta-gpu.outputs.tags }}
           labels: ${{ steps.meta-gpu.outputs.labels }}
           push: true
           cache-from: type=registry,ref=cogstacksystems/medcat-service-gpu:buildcache
           cache-to: type=registry,ref=cogstacksystems/medcat-service-gpu:buildcache,mode=max
+          build-args: |
+            REINSTALL_CORE_FROM_LOCAL=true
           
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
