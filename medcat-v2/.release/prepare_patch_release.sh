@@ -42,15 +42,16 @@ while (( "$#" )); do
     esac
 done
 
-if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "Error: version '$VERSION' must be in format X.Y.Z"
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([ab]|rc)?[0-9]*$ ]]; then
+    echo "Error: version '$VERSION' must be in format X.Y.Z or X.Y.Z<pre><n> (e.g 2.0.0b0)"
     exit 1
 fi
 VERSION_TAG="medcat/v$VERSION"
 
 # Extract version components
 VERSION_MAJOR_MINOR="${VERSION%.*}"
-VERSION_PATCH="${VERSION##*.}"
+# work with alpha/beta/rc
+VERSION_PATCH="$(echo "$VERSION" | sed -E 's/^[0-9]+\.[0-9]+\.([0-9]+).*/\1/')"
 RELEASE_BRANCH="medcat/v$VERSION_MAJOR_MINOR"
 
 # some prerequisites
