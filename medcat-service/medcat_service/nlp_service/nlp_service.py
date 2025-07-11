@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 import injector
 
 from medcat_service.nlp_processor import MedCatProcessor
@@ -15,11 +13,13 @@ class NlpService:
     def __init__(self):
         self.nlp = None
 
-    def get_processor(self):
+    def get_processor(self) -> MedCatProcessor:
         """
         Returns the wrapped NLP processor
         :return:
         """
+        if self.nlp is None:
+            raise RuntimeError("NLP processor not set")
         return self.nlp
 
 

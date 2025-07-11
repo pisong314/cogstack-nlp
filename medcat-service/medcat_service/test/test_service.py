@@ -1,10 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 
 import json
 import logging
-import os
 import unittest
+from unittest.mock import patch
 
 import medcat_service.test.common as common
 from medcat_service.app import app as medcat_app
@@ -20,6 +19,8 @@ class TestMedcatService(unittest.TestCase):
     ENDPOINT_INFO_ENDPOINT = '/api/info'
     ENDPOINT_PROCESS_SINGLE = '/api/process'
     ENDPOINT_PROCESS_BULK = '/api/process_bulk'
+    ENDPOINT_HEALTH_LIVE = "/api/health/live"
+    ENDPOINT_HEALTH_READY = "/api/health/ready"
 
     # Static initialization methods
     #
@@ -31,31 +32,8 @@ class TestMedcatService(unittest.TestCase):
         :return:
         """
         cls._setup_logging(cls)
-        cls._setup_medcat_processor(cls)
+        common.setup_medcat_processor()
         cls._setup_flask_app(cls)
-
-    @staticmethod
-    def _setup_medcat_processor(cls, config=None):
-        # TODO: these parameters need to be externalized into config file and a custom MedCAT processor created here
-        if "APP_MODEL_CDB_PATH" not in os.environ:
-            cls.log.warning("""Env variable: 'APP_MODEL_CDB_PATH': not set
-                             "-- setting to default: './models/medmen/cdb.dat'""")
-            os.environ["APP_MODEL_CDB_PATH"] = "./models/medmen/cdb.dat"
-
-        if "APP_MODEL_VOCAB_PATH" not in os.environ:
-            cls.log.warning("OS ENV: APP_MODEL_VOCAB_PATH: not set -- setting to default: './models/medmen/vocab.dat'")
-            os.environ["APP_MODEL_VOCAB_PATH"] = "./models/medmen/vocab.dat"
-
-        if "APP_MODEL_META_PATH_LIST" not in os.environ:
-            cls.log.warning("""OS ENV: APP_MODEL_META_PATH_LIST: not set -- setting to
-                                default: './models/medmen/Status'""")
-            os.environ["APP_MODEL_META_PATH_LIST"] = "./models/medmen/Status"
-
-        if "APP_BULK_NPROC" not in os.environ:
-            cls.log.warning("OS ENV: APP_BULK_NPROC: not set -- setting to default: 8")
-            os.environ["APP_BULK_NPROC"] = "8"
-
-        os.environ["APP_TRAINING_MODE"] = "False"
 
     @staticmethod
     def _setup_flask_app(cls):
@@ -121,6 +99,28 @@ class TestMedcatService(unittest.TestCase):
     def testGetInfo(self):
         response = self.client.get(self.ENDPOINT_INFO_ENDPOINT)
         self.assertEqual(response.status_code, 200)
+
+    def testLiveness(self):
+        response = self.client.get(self.ENDPOINT_HEALTH_LIVE)
+        self.assertEqual(response.status_code, 200)
+
+    def testReadinessIsOk(self):
+        response = self.client.get(self.ENDPOINT_HEALTH_READY)
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        self.assertEqual(data, {"status": "UP", "checks": [{"name": "MedCAT", "status": "UP"}]})
+
+    def testReadinessIsNotOk(self):
+        with patch('medcat_service.nlp_service.NlpService.get_processor') as mock_get_processor:
+            mock_processor = mock_get_processor.return_value
+            mock_processor.is_ready.return_value = {"status": "DOWN", "name": "MedCAT"}
+
+            response = self.client.get(self.ENDPOINT_HEALTH_READY)
+            self.assertEqual(response.status_code, 503)
+
+            data = json.loads(response.data)
+            self.assertEqual(
+                data, {"status": "DOWN", "checks": [{"name": "MedCAT", "status": "DOWN"}]})
 
     def testProcessSingleShortDoc(self):
         doc = common.get_example_short_document()

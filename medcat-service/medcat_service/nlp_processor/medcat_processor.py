@@ -15,6 +15,7 @@ from medcat.components.addons.meta_cat import MetaCATAddon
 from medcat.components.ner.trf.deid import DeIdModel
 from medcat.vocab import Vocab
 
+from medcat_service.types import HealthCheckResponse
 
 class NlpProcessor:
     """
@@ -40,6 +41,12 @@ class NlpProcessor:
     def process_content_bulk(self, content, *args, **kwargs):
         pass
 
+    def is_ready(self) -> HealthCheckResponse:
+        return {
+            "name": "MedCAT",
+            "status": "DOWN"
+        }
+
     @staticmethod
     def _get_timestamp():
         """
@@ -59,6 +66,7 @@ class MedCatProcessor(NlpProcessor):
         super().__init__()
 
         self.log.info("Initializing MedCAT processor ...")
+        self._is_ready_flag = False
 
         self.app_name = os.getenv("APP_NAME", "MedCAT")
         self.app_lang = os.getenv("APP_MODEL_LANGUAGE", "en")
@@ -84,7 +92,34 @@ class MedCatProcessor(NlpProcessor):
         self.cat = self._create_cat()
         self.cat.train = os.getenv("APP_TRAINING_MODE", False)
 
-        self.log.info("MedCAT processor is ready")
+        self._is_ready_flag = self._check_medcat_readiness()
+
+    def _check_medcat_readiness(self) -> bool:
+        readiness_text = "MedCAT is ready and can get_entities"
+        try:
+            result = self.cat.get_entities(readiness_text)
+            self.log.debug("Result of readiness check is" + str(result))
+            self.log.info("MedCAT processor is ready")
+            return True
+        except Exception as e:
+            self.log.error("MedCAT processor is not ready. Failed the readiness check", exc_info=e)
+            return False
+
+    def is_ready(self) -> HealthCheckResponse:
+        """
+        Is the MedCAT processor ready to get entities from input text
+        """
+        if self._is_ready_flag:
+            return {
+                "name": "MedCAT",
+                "status": "UP"
+            }
+        else:
+            self.log.warning("MedCAT Processor is not ready. Returning status DOWN")
+            return {
+                "name": "MedCAT",
+                "status": "DOWN"
+            }
 
     def get_app_info(self):
         """Returns general information about the application.
