@@ -14,7 +14,7 @@ from medcat.config import Config
 from medcat.config.config_meta_cat import ConfigMetaCAT
 from medcat.vocab import Vocab
 
-from medcat_service.types import HealthCheckResponse, ModelCardInfo, ServiceInfo
+from medcat_service.types import HealthCheckResponse, ModelCardInfo, ProcessErrorsResult, ProcessResult, ServiceInfo
 
 
 class NlpProcessor:
@@ -168,11 +168,11 @@ class MedCatProcessor(NlpProcessor):
         """
         if "text" not in content:
             error_msg = "'text' field missing in the payload content."
-            nlp_result = {
-                "success": False,
-                "errors": [error_msg],
-                "timestamp": NlpProcessor._get_timestamp(),
-            }
+            nlp_result = ProcessErrorsResult(
+                success=False,
+                errors=[error_msg],
+                timestamp=NlpProcessor._get_timestamp(),
+            )
 
             return nlp_result
 
@@ -192,8 +192,7 @@ class MedCatProcessor(NlpProcessor):
             else:
                 entities = []
 
-        elapsed_time = (time.time_ns() - start_time_ns) / \
-            10e8  # nanoseconds to seconds
+        elapsed_time = (time.time_ns() - start_time_ns) / 10e8  # nanoseconds to seconds
 
         if kwargs.get("meta_anns_filters"):
             meta_anns_filters = kwargs.get("meta_anns_filters")
@@ -201,19 +200,16 @@ class MedCatProcessor(NlpProcessor):
                         all(e['meta_anns'][task]['value'] in filter_values
                             for task, filter_values in meta_anns_filters)]
 
-        entities = self.process_entities(entities, **kwargs)
+        entities = list(self.process_entities(entities, **kwargs))
 
-        nlp_result = {
-            "text": str(text),
-            "annotations": entities,
-            "success": True,
-            "timestamp": NlpProcessor._get_timestamp(),
-            "elapsed_time":  elapsed_time
-        }
-
-        # append the footer
-        if "footer" in content:
-            nlp_result["footer"] = content["footer"]
+        nlp_result = ProcessResult(
+            text=str(text),
+            annotations=entities,
+            success=True,
+            timestamp=NlpProcessor._get_timestamp(),
+            elapsed_time=elapsed_time,
+            footer=content.get("footer"),
+        )
 
         return nlp_result
 
@@ -235,6 +231,7 @@ class MedCatProcessor(NlpProcessor):
 
         try:
             if self.DEID_MODE:
+                # TODO 2025-07-21: deid_multi_texts doesnt exist in medcat 2?
                 ann_res = self.cat.deid_multi_texts(MedCatProcessor._generate_input_doc(content, invalid_doc_ids),
                                                     redact=self.DEID_REDACT)
             else:
@@ -248,10 +245,9 @@ class MedCatProcessor(NlpProcessor):
         except Exception as e:
             self.log.error("Unable to process data", exc_info=e)
 
-        additional_info = {"elapsed_time": str(
-            (time.time_ns() - start_time_ns) / 10e8)}
+        elapsed_time = (time.time_ns() - start_time_ns) / 10e8  # nanoseconds to seconds
 
-        return self._generate_result(content, ann_res, invalid_doc_ids, additional_info)
+        return self._generate_result(content, ann_res, elapsed_time)
 
     def retrain_medcat(self, content, replace_cdb):
         """Retrains Medcat and redeploys model.
@@ -422,14 +418,14 @@ class MedCatProcessor(NlpProcessor):
             else:
                 invalid_doc_idx.append(i)
 
-    def _generate_result(self, in_documents, annotations, invalid_doc_idx, additional_info={}):
+    def _generate_result(self, in_documents, annotations, elapsed_time):
         """Generator function merging the resulting annotations with the input documents.
 
         Args:
             in_documents (list): Array of input documents that contain "text" field.
             annotations (dict): Array of annotations extracted from documents.
-            invalid_doc_idx (list): Array of invalid document idx.
             additional_info (dict, optional): Additional information to include in results. Defaults to {}.
+            elapsed_time: Total elapsed time to get annotations
 
         Yields:
             dict: Merged document with annotations.
@@ -440,31 +436,37 @@ class MedCatProcessor(NlpProcessor):
             if not self.DEID_MODE and i in annotations.keys():
                 # generate output for valid annotations
 
-                entities = self.process_entities(annotations.get(i))
+                entities = list(self.process_entities(annotations.get(i)))
 
-                # parse the result
-                out_res = {"text": str(in_ct["text"]),
-                           "annotations": entities,
-                           "success": True,
-                           "timestamp": NlpProcessor._get_timestamp()}
-                out_res.update(additional_info)
+                out_res = ProcessResult(
+                    text=str(in_ct["text"]),
+                    annotations=entities,
+                    success=True,
+                    timestamp=NlpProcessor._get_timestamp(),
+                    elapsed_time=elapsed_time,
+                    footer=in_ct.get("footer"),
+                )
             elif self.DEID_MODE:
-                out_res = {"text": in_ct["text"],
-                           "annotations": [],
-                           "success": True,
-                           "timestamp": NlpProcessor._get_timestamp()}
-                out_res.update(additional_info)
+
+                out_res = ProcessResult(
+                    text=str(in_ct["text"]),
+                    annotations=[],
+                    success=True,
+                    timestamp=NlpProcessor._get_timestamp(),
+                    elapsed_time=elapsed_time,
+                    footer=in_ct.get("footer"),
+                )
             else:
                 # Don't fetch an annotation set
                 # as the document was invalid
-                out_res = {"text": in_ct["text"],
-                           "annotations": [],
-                           "success": True,
-                           "timestamp": NlpProcessor._get_timestamp()}
-
-            # append the footer
-            if "footer" in in_ct:
-                out_res["footer"] = in_ct["footer"]
+                out_res = ProcessResult(
+                    text=str(in_ct["text"]),
+                    annotations=[],
+                    success=True,
+                    timestamp=NlpProcessor._get_timestamp(),
+                    elapsed_time=elapsed_time,
+                    footer=in_ct.get("footer"),
+                )
 
             yield out_res
 
