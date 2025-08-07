@@ -87,16 +87,37 @@ class LSTM(nn.Module):
 class BertForMetaAnnotation(nn.Module):
     _keys_to_ignore_on_load_unexpected: List[str] = [r"pooler"]  # type: ignore
 
-    def __init__(self, config):
+    def __init__(self, config, save_dir_path=None):
         super(BertForMetaAnnotation, self).__init__()
-        _bertconfig = AutoConfig.from_pretrained(config.model.model_variant,num_hidden_layers=config.model['num_layers'])
+        if save_dir_path:
+            try:
+                _bertconfig = AutoConfig.from_pretrained(save_dir_path + "/bert_config.json",
+                                                         num_hidden_layers=config.model['num_layers'])
+            except Exception:
+                _bertconfig = AutoConfig.from_pretrained(config.model.model_variant,
+                                                         num_hidden_layers=config.model['num_layers'])
+                logger.info("BERT config not found locally — downloaded successfully from Hugging Face.")
+
+        else:
+            _bertconfig = AutoConfig.from_pretrained(config.model.model_variant,
+                                                     num_hidden_layers=config.model['num_layers'])
+
         if config.model['input_size'] != _bertconfig.hidden_size:
             logger.warning("Input size for %s model should be %d, provided input size is %d. Input size changed to %d",config.model.model_variant,_bertconfig.hidden_size,config.model['input_size'],_bertconfig.hidden_size)
 
-        bert = BertModel.from_pretrained(config.model.model_variant, config=_bertconfig)
+        try:
+            bert = BertModel.from_pretrained(config.model.model_variant, config=_bertconfig)
+        except Exception:
+            bert = BertModel(_bertconfig)
+            if save_dir_path:
+                logger.info("Could not load BERT pretrained weights from Hugging Face. BERT model loaded with random weights. \nThis workflow is fine since model initialization is performed while loading model pack from disk.")
+            else:
+                logger.warning("Could not load BERT pretrained weights from Hugging Face. BERT model loaded with random weights.\nDO NOT use this model without loading model pack.")
+
         self.config = config
         self.config.use_return_dict = False
         self.bert = bert
+        self.bert_config = _bertconfig
         self.num_labels = config.model["nclasses"]
         for param in self.bert.parameters():
             param.requires_grad = not config.model.model_freeze_layers
