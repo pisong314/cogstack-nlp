@@ -6,8 +6,9 @@ on:
   push:
     branches: [ "medcat-v1/production", "medcat-v1/v[0-9]+.[0-9]+.post" ]
   
-  # release:
-  #   types: [ published , edited ]
+  release:
+    types: [ published , edited ]
+
 defaults:
   run:
     working-directory: ./medcat-v1
@@ -16,8 +17,10 @@ jobs:
 
     runs-on: ubuntu-24.04
     concurrency: build-n-publish-to-pypi
-    if: | 
-     github.repository == 'CogStack/cogstack-nlp'
+    if: |
+      github.repository == 'CogStack/cogstack-nlp' &&
+      (github.event_name != 'release' || startsWith(github.event.release.tag_name, 'medcat-v1'))
+
 
     steps:
       - name: Checkout production
@@ -34,7 +37,7 @@ jobs:
       - name: Run UATs
         run: |
           python -m pip install --upgrade pip
-          export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_MEDCAT="1.16.1"  # NOTE: This is where the project verison is set
+          export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_MEDCAT="1.16.3"  # NOTE: This is where the project verison is set
           pip install -r requirements-dev.txt
           all_files=$(git ls-files | grep '^tests/.*\.py$' | grep -v '/__init__\.py$' | sed 's/\.py$//' | sed 's/\//./g')
           num_files=$(echo "$all_files" | wc -l)
@@ -53,7 +56,7 @@ jobs:
 
       - name: Build a binary wheel and a source tarball
         run: >-
-          SETUPTOOLS_SCM_PRETEND_VERSION_FOR_MEDCAT="1.16.1"
+          SETUPTOOLS_SCM_PRETEND_VERSION_FOR_MEDCAT="1.16.3"
           python -m
           build
           --sdist
