@@ -6,6 +6,7 @@ from datetime import date
 from concurrent.futures import ProcessPoolExecutor, as_completed, Future
 import itertools
 from contextlib import contextmanager
+from collections import deque
 
 import shutil
 import zipfile
@@ -318,6 +319,57 @@ class CAT(AbstractSerialisable):
             # Yield all results from this batch
             yield from cur_results
 
+    def save_entities_multi_texts(
+            self,
+            texts: Union[Iterable[str], Iterable[tuple[str, str]]],
+            save_dir_path: str,
+            only_cui: bool = False,
+            n_process: int = 1,
+            batch_size: int = -1,
+            batch_size_chars: int = 1_000_000,
+            batches_per_save: int = 20,
+    ) -> None:
+        """Saves the resulting entities on disk and allows multiprocessing.
+
+        This uses `get_entities_multi_texts` under the hood. But it is designed
+        to save the data on disk as it comes through.
+
+        Args:
+            texts (Union[Iterable[str], Iterable[tuple[str, str]]]):
+                The input text. Either an iterable of raw text or one
+                with in the format of `(text_index, text)`.
+            save_dir_path (str):
+                The path where the results are saved. The directory will have
+                a `annotated_ids.pickle` file containing the
+                `tuple[list[str], int]` with a list of indices already saved
+                and the number of parts already saved. In addition there will
+                be (usually multuple) files in the `part_<num>.pickle` format
+                with the partial outputs.
+            only_cui (bool):
+                Whether to only return CUIs rather than other information
+                like start/end and annotated value. Defaults to False.
+            n_process (int):
+                Number of processes to use. Defaults to 1.
+                The number of texts to batch at a time. A batch of the
+                specified size will be given to each worker process.
+                Defaults to -1 and in this case the character count will
+                be used instead.
+            batch_size_chars (int):
+                The maximum number of characters to process in a batch.
+                Each process will be given batch of texts with a total
+                number of characters not exceeding this value. Defaults
+                to 1,000,000 characters. Set to -1 to disable.
+        """
+        if save_dir_path is None:
+            raise ValueError("Need to specify a save path (`save_dir_path`), "
+                             f"got {save_dir_path}")
+        out_iter = self.get_entities_multi_texts(
+            texts, only_cui=only_cui, n_process=n_process,
+            batch_size=batch_size, batch_size_chars=batch_size_chars,
+            save_dir_path=save_dir_path, batches_per_save=batches_per_save)
+        # NOTE: not keeping anything since it'll be saved on disk
+        deque(out_iter, maxlen=0)
+
     def get_entities_multi_texts(
             self,
             texts: Union[Iterable[str], Iterable[tuple[str, str]]],
@@ -376,6 +428,15 @@ class CAT(AbstractSerialisable):
             saver = BatchAnnotationSaver(save_dir_path, batches_per_save)
         else:
             saver = None
+        yield from self._get_entities_multi_texts(
+            n_process=n_process, batch_iter=batch_iter, saver=saver)
+
+    def _get_entities_multi_texts(
+            self,
+            n_process: int,
+            batch_iter: Iterator[list[tuple[str, str, bool]]],
+            saver: Optional[BatchAnnotationSaver],
+            ) -> Iterator[tuple[str, Union[dict, Entities, OnlyCUIEntities]]]:
         if n_process == 1:
             # just do in series
             for batch in batch_iter:
