@@ -523,15 +523,7 @@ class CAT(AbstractSerialisable):
             'context_similarity': ent.context_similarity,
             'start': ent.base.start_char_index,
             'end': ent.base.end_char_index,
-            # TODO: add additional info (i.e mappings)
-            # for addl in addl_info:
-            #     tmp = self.cdb.addl_info.get(addl, {}).get(cui, [])
-            #     out_ent[addl.split("2")[-1]] = list(tmp) if type(tmp) is
-            # set else tmp
             'id': ent.id,
-            # TODO: add met annotations
-            # if hasattr(ent._, 'meta_anns') and ent._.meta_anns:
-            #     out_ent['meta_anns'] = ent._.meta_anns
             'meta_anns': {},
             'context_left': left_context,
             'context_center': center_context,
@@ -539,6 +531,26 @@ class CAT(AbstractSerialisable):
         }
         # addons:
         out_dict.update(self.get_addon_output(ent))  # type: ignore
+        # other ontologies
+        if self.config.general.map_to_other_ontologies:
+            for ont in self.config.general.map_to_other_ontologies:
+                if ont in out_dict:
+                    logger.warning(
+                        "Trying to map to ontology '%s', but it already "
+                        "exists in the out dict, so unable to add it. "
+                        "If this is for an actual ontology that shares a "
+                        "name with something else, cosider renaming the "
+                        "mapping in `cdb.addl_info`")
+                    continue
+                addl_info_name = f"cui2{ont}"
+                if addl_info_name not in self.cdb.addl_info:
+                    logger.warning(
+                        "Trying to map to ontology '%s' but it is not set in "
+                        "addl_info so unable to do so", ont)
+                    continue
+                ont_map = self.cdb.addl_info[addl_info_name]
+                ont_values = ont_map.get(cui, [])
+                out_dict[ont] = ont_values  # type: ignore
         return out_dict
 
     def get_addon_output(self, ent: MutableEntity) -> dict[str, dict]:
