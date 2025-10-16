@@ -57,7 +57,8 @@ classifiers = [
 # For an analysis of this field vs pip's requirements files see:
 # https://packaging.python.org/discussions/install-requires-vs-requirements/
 dependencies = [ # Optional
-  "numpy>2.0",
+  "numpy>=2.1; python_version >= '3.13'",
+  "numpy>=2.0; python_version < '3.13'",
   "dill",
   "pandas>=2.2,<3.0",
   "tqdm>=4.64,<5.0",
@@ -102,6 +103,8 @@ dict_ner = [
 ]
 deid = [
   "datasets>=2.2.2,<3.0.0",
+  # Transformers 4.57 doesn't support 3.9
+  "transformers!=4.57.0; python_version == '3.9'",
   "transformers>=4.41.0,<5.0", # avoid major bump
   # Transformers 4.57 doesn't support 3.9
   "transformers!=4.57.0; python_version == '3.9'",
@@ -112,6 +115,8 @@ deid = [
   "scipy>=1.14; python_version >= '3.13'",
 ]
 rel_cat = [
+  # Transformers 4.57 doesn't support 3.9
+  "transformers!=4.57.0; python_version == '3.9'",
   "transformers>=4.41.0,<5.0", # avoid major bump
   # Transformers 4.57 doesn't support 3.9
   "transformers!=4.57.0; python_version == '3.9'",
